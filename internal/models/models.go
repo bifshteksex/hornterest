@@ -18,7 +18,8 @@ type Pin struct {
 	Duration    *float64  `json:"duration"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	Comments    []Comment `gorm:"foreignKey:PinID"` // Связь с комментариями
+	Comments    []Comment `gorm:"foreignKey:PinID"`
+	Tags        []PinTag  `gorm:"foreignKey:PinID" json:"tags"`
 }
 
 // UploadPinRequest представляет данные, необходимые для загрузки нового пина
@@ -88,4 +89,23 @@ type Comment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	// User      User      `gorm:"foreignKey:UserID"`
 	// Replies   []Comment `gorm:"foreignKey:ReplyToID"`
+}
+
+// Tag представляет тег для контента
+type Tag struct {
+	ID         int       `json:"id" gorm:"primaryKey"`
+	TitleModel string    `json:"title_model"`
+	TitleEN    string    `json:"title_en"`
+	TitleRU    string    `json:"title_ru"`
+	Count      int       `json:"count"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// PinTag представляет связь между пином и тегом
+type PinTag struct {
+	ID        int       `json:"id" gorm:"primaryKey"`
+	PinID     int       `json:"pin_id"`
+	TagID     int       `json:"tag_id"`
+	CreatedAt time.Time `json:"created_at"`
 }
