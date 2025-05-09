@@ -45,6 +45,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(dbGORM, cfg)
 	actionHandler := handlers.NewActionHandler(dbGORM)
 	subscriptionHandler := handlers.NewSubscriptionHandler(dbGORM)
+	tagHandler := handlers.NewTagHandler(dbGORM)
 
 	// Создаем роутер gorilla/mux
 	router := mux.NewRouter()
@@ -59,6 +60,7 @@ func main() {
 	// Регистрация маршрутов из отдельных файлов
 	routes.SetupPinRoutes(router, pinHandler, actionHandler, cfg)
 	routes.SetupUserRoutes(router, userHandler, subscriptionHandler, cfg)
+	routes.SetupTagRoutes(router, tagHandler, cfg)
 
 	// Маршрут для статики
 	router.PathPrefix("/upload/").Handler(http.StripPrefix("/upload/", http.FileServer(http.Dir("./upload"))))
