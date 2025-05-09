@@ -10,6 +10,9 @@ import (
 	"pornterest/internal/database"
 	"pornterest/internal/handlers"
 	"pornterest/internal/routes"
+	"pornterest/internal/tasks" // добавляем импорт
+
+	"log/slog" // добавляем для логгера
 
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
@@ -23,25 +26,32 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	// Настройка логгера
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
 	// Загрузка конфигурации
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	// Подключение к базе данных (теперь возвращает *gorm.DB)
+	// Подключение к базе данных
 	dbGORM, err := database.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	sqlDB, err := dbGORM.DB() // Получаем базовый *sql.DB для корректного defer Close()
+	sqlDB, err := dbGORM.DB()
 	if err != nil {
 		log.Fatalf("Failed to get generic database object: %v", err)
 	}
 	defer sqlDB.Close()
 
-	// Создание обработчиков (передаем *gorm.DB)
-	pinHandler := handlers.NewPinHandler(dbGORM)
+	// Инициализация TaskQueue
+	taskQueue := tasks.NewTaskQueue(dbGORM, logger)
+	taskQueue.StartProcessing()
+
+	// Создание обработчиков
+	pinHandler := handlers.NewPinHandler(dbGORM, taskQueue) // обновили
 	userHandler := handlers.NewUserHandler(dbGORM, cfg)
 	actionHandler := handlers.NewActionHandler(dbGORM)
 	subscriptionHandler := handlers.NewSubscriptionHandler(dbGORM)
@@ -52,12 +62,12 @@ func main() {
 
 	// Настройка CORS
 	c := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"}, // В production следует указать конкретные домены
+		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"GET", "POST", "DELETE", "OPTIONS", "PUT"},
 		AllowedHeaders: []string{"Content-Type", "Authorization"},
 	})
 
-	// Регистрация маршрутов из отдельных файлов
+	// Регистрация маршрутов
 	routes.SetupPinRoutes(router, pinHandler, actionHandler, cfg)
 	routes.SetupUserRoutes(router, userHandler, subscriptionHandler, cfg)
 	routes.SetupTagRoutes(router, tagHandler, cfg)
@@ -65,7 +75,7 @@ func main() {
 	// Маршрут для статики
 	router.PathPrefix("/upload/").Handler(http.StripPrefix("/upload/", http.FileServer(http.Dir("./upload"))))
 
-	// Применяем CORS middleware ко всему роутеру
+	// Применяем CORS middleware
 	handler := c.Handler(router)
 
 	// Запуск сервера

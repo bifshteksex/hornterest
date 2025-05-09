@@ -13,6 +13,7 @@ import (
 
 	"pornterest/internal/middleware"
 	"pornterest/internal/models"
+	"pornterest/internal/tasks"
 
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
@@ -20,12 +21,15 @@ import (
 
 // PinHandler обрабатывает запросы, связанные с пинами
 type PinHandler struct {
-	db *gorm.DB
+	db        *gorm.DB
+	taskQueue *tasks.TaskQueue // используем полное имя с пакетом
 }
 
-// NewPinHandler создает новый экземпляр PinHandler
-func NewPinHandler(db *gorm.DB) *PinHandler { // Принимаем *gorm.DB
-	return &PinHandler{db: db}
+func NewPinHandler(db *gorm.DB, taskQueue *tasks.TaskQueue) *PinHandler {
+	return &PinHandler{
+		db:        db,
+		taskQueue: taskQueue,
+	}
 }
 
 // GetPins обрабатывает HTTP GET запрос для получения пинов с пагинацией
@@ -130,7 +134,6 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 	title := r.FormValue("title")
 	description := r.FormValue("description")
 	original := r.FormValue("link")
-	// tags := r.FormValue("tags")
 	allowCommentsStr := r.FormValue("allowComments")
 	isAiGeneratedStr := r.FormValue("isAiGenerated")
 	widthStr := r.FormValue("width")
@@ -253,6 +256,51 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Failed to save pin info to database: %v", result.Error)
 		http.Error(w, "Failed to save pin info", http.StatusInternalServerError)
 		return
+	}
+
+	tagsStr := r.FormValue("tags")
+	if tagsStr != "" {
+		var tags []string
+		if err := json.Unmarshal([]byte(tagsStr), &tags); err != nil {
+			log.Printf("Failed to parse tags: %v", err)
+		} else {
+			// Создаем связи между пином и тегами
+			for _, tagTitle := range tags {
+				var tag models.Tag
+				// Ищем существующий тег
+				result := h.db.Where("title_model = ?", tagTitle).First(&tag)
+				if result.Error == gorm.ErrRecordNotFound {
+					// Если тег не найден, создаем новый
+					tag = models.Tag{
+						TitleModel: tagTitle,
+						TitleEN:    formatModelTagToEnglish(tagTitle),
+						Count:      0,
+						CreatedAt:  time.Now(),
+						UpdatedAt:  time.Now(),
+					}
+					if err := h.db.Create(&tag).Error; err != nil {
+						log.Printf("Failed to create tag: %v", err)
+						continue
+					}
+				}
+
+				// Создаем связь между пином и тегом
+				pinTag := models.PinTag{
+					PinID:     pin.ID,
+					TagID:     tag.ID,
+					CreatedAt: time.Now(),
+				}
+				if err := h.db.Create(&pinTag).Error; err != nil {
+					log.Printf("Failed to create pin-tag relation: %v", err)
+					continue
+				}
+
+				// Добавляем тег в очередь на перевод только после успешного создания связи
+				if tag.TitleRU == "" {
+					h.taskQueue.AddTranslationTask(tag.ID)
+				}
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
