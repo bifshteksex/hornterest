@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,24 +107,40 @@ func (h *TagHandler) GetAllTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limitStr := r.URL.Query().Get("limit")
+	pageStr := r.URL.Query().Get("page")
+
+	limit := 20 // Значение по умолчанию
+	if limitStr != "" {
+		l, err := strconv.Atoi(limitStr)
+		if err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	page := 1 // Значение по умолчанию
+	if pageStr != "" {
+		p, err := strconv.Atoi(pageStr)
+		if err == nil && p > 0 {
+			page = p
+		}
+	}
+
 	var tags []models.Tag
 	var total int64
 
-	page := 1
-	limit := 20
-
-	// Подсчет общего количества
 	if err := h.db.Model(&models.Tag{}).Count(&total).Error; err != nil {
+		log.Printf("Failed to count tags: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	// Получение тегов с пагинацией
 	if err := h.db.
 		Limit(limit).
 		Offset((page - 1) * limit).
 		Order("count DESC").
 		Find(&tags).Error; err != nil {
+		log.Printf("Failed to fetch tags: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -136,6 +154,7 @@ func (h *TagHandler) GetAllTags(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

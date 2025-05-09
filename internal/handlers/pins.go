@@ -274,12 +274,18 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 					tag = models.Tag{
 						TitleModel: tagTitle,
 						TitleEN:    formatModelTagToEnglish(tagTitle),
-						Count:      0,
+						Count:      1,
 						CreatedAt:  time.Now(),
 						UpdatedAt:  time.Now(),
 					}
 					if err := h.db.Create(&tag).Error; err != nil {
 						log.Printf("Failed to create tag: %v", err)
+						continue
+					}
+				} else {
+					// Увеличиваем счетчик существующего тега
+					if err := h.db.Model(&tag).Update("count", tag.Count+1).Error; err != nil {
+						log.Printf("Failed to update tag count: %v", err)
 						continue
 					}
 				}
