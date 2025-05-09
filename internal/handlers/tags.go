@@ -26,11 +26,17 @@ type ProcessTagsRequest struct {
 	Tags []string `json:"tags"`
 }
 
+// ProcessTags обрабатывает массив тегов от DeepDanbooru
 type ProcessTagsResponse struct {
-	Tags []string `json:"tags"`
+	Tags []TagInfo `json:"tags"`
 }
 
-// ProcessTags обрабатывает массив тегов от DeepDanbooru
+type TagInfo struct {
+	Title string `json:"title"`
+	Count int    `json:"count"`
+}
+
+// Обновляем функцию ProcessTags
 func (h *TagHandler) ProcessTags(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -43,7 +49,7 @@ func (h *TagHandler) ProcessTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var processedTags []string
+	var processedTags []TagInfo
 
 	for _, modelTag := range req.Tags {
 		var tag models.Tag
@@ -67,18 +73,23 @@ func (h *TagHandler) ProcessTags(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 
-				// TODO: Добавить в очередь на перевод
-				processedTags = append(processedTags, englishTitle)
+				processedTags = append(processedTags, TagInfo{
+					Title: englishTitle,
+					Count: tag.Count,
+				})
 			} else {
 				continue
 			}
 		} else {
 			// Используем русский перевод если есть, иначе английский
+			title := tag.TitleEN
 			if tag.TitleRU != "" {
-				processedTags = append(processedTags, tag.TitleRU)
-			} else {
-				processedTags = append(processedTags, tag.TitleEN)
+				title = tag.TitleRU
 			}
+			processedTags = append(processedTags, TagInfo{
+				Title: title,
+				Count: tag.Count,
+			})
 		}
 	}
 
