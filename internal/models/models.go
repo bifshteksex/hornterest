@@ -4,22 +4,23 @@ import "time"
 
 // Pin представляет структуру данных для пина
 type Pin struct {
-	ID          int       `json:"id"`
-	Path        string    `json:"path"`
-	Description string    `json:"description"`
-	UserID      int       `json:"user_id"`
-	Original    *string   `json:"original"`
-	Comment     *bool     `json:"comment"`
-	Ai          *bool     `json:"ai"`
-	Type        *string   `json:"type"`
-	Title       string    `json:"title"`
-	Width       *int      `json:"width"`
-	Height      *int      `json:"height"`
-	Duration    *float64  `json:"duration"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Comments    []Comment `gorm:"foreignKey:PinID"`
-	Tags        []PinTag  `gorm:"foreignKey:PinID" json:"tags"`
+	ID               int       `json:"id"`
+	Path             string    `json:"path"`
+	Description      string    `json:"description"`
+	UserID           int       `json:"user_id"`
+	Original         *string   `json:"original"`
+	Comment          *bool     `json:"comment"`
+	Ai               *bool     `json:"ai"`
+	Type             *string   `json:"type"`
+	Title            string    `json:"title"`
+	Width            *int      `json:"width"`
+	Height           *int      `json:"height"`
+	Duration         *float64  `json:"duration"`
+	OriginalFileName *string   `json:"original_file_name"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	Comments         []Comment `gorm:"foreignKey:PinID"`
+	Tags             []PinTag  `gorm:"foreignKey:PinID" json:"tags"`
 }
 
 // UploadPinRequest представляет данные, необходимые для загрузки нового пина

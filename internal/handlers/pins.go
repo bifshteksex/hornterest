@@ -236,19 +236,20 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 
 	// Сохраняем информацию о пине в базе данных
 	pin := &models.Pin{
-		Path:        "http://localhost:8080/" + filePath,
-		Description: description,
-		UserID:      userID,
-		Original:    &original,
-		Comment:     &allowComments,
-		Ai:          &isAiGenerated,
-		Type:        fileType,
-		Title:       title,
-		Width:       width,
-		Height:      height,
-		Duration:    duration,
-		CreatedAt:   time.Now(), // GORM может делать это автоматически
-		UpdatedAt:   time.Now(), // GORM может делать это автоматически
+		Path:             "http://localhost:8080/" + filePath,
+		Description:      description,
+		UserID:           userID,
+		Original:         &original,
+		Comment:          &allowComments,
+		Ai:               &isAiGenerated,
+		Type:             fileType,
+		Title:            title,
+		Width:            width,
+		Height:           height,
+		Duration:         duration,
+		OriginalFileName: &fileHeader.Filename,
+		CreatedAt:        time.Now(), // GORM может делать это автоматически
+		UpdatedAt:        time.Now(), // GORM может делать это автоматически
 	}
 
 	result := h.db.Create(pin)
@@ -302,9 +303,9 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 				}
 
 				// Добавляем тег в очередь на перевод только после успешного создания связи
-				if tag.TitleRU == "" {
-					h.taskQueue.AddTranslationTask(tag.ID)
-				}
+				// if tag.TitleRU == "" {
+				// 	h.taskQueue.AddTranslationTask(tag.ID)
+				// }
 			}
 		}
 	}
