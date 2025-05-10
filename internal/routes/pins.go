@@ -29,4 +29,7 @@ func SetupPinRoutes(router *mux.Router, pinHandler *handlers.PinHandler, actionH
 	// Маршруты для комментариев
 	router.Handle("/api/pins/{id:[0-9]+}/comments", middleware.AuthMiddleware(cfg)(http.HandlerFunc(pinHandler.AddComment))).Methods("POST")
 	router.HandleFunc("/api/pins/{id:[0-9]+}/comments", pinHandler.GetPinComments).Methods("GET")
+
+	// Поиск пинов
+	router.HandleFunc("/api/search", pinHandler.SearchPins)
 }

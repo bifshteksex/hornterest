@@ -11,4 +11,5 @@ func SetupTagRoutes(router *mux.Router, tagHandler *handlers.TagHandler, cfg con
 	router.HandleFunc("/api/tags/process", tagHandler.ProcessTags).Methods("POST")
 	router.HandleFunc("/api/tags", tagHandler.GetAllTags).Methods("GET")
 	router.HandleFunc("/api/tags", tagHandler.UpdateTag).Methods("PUT")
+	router.HandleFunc("/api/tags/search", tagHandler.SearchTags).Methods("GET")
 }

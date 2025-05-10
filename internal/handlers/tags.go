@@ -36,6 +36,10 @@ type TagInfo struct {
 	Count int    `json:"count"`
 }
 
+type SearchTagsResponse struct {
+	Tags []models.Tag `json:"tags"`
+}
+
 // Обновляем функцию ProcessTags
 func (h *TagHandler) ProcessTags(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -212,6 +216,48 @@ func (h *TagHandler) UpdateTag(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Tag updated successfully",
 	})
+}
+
+func (h *TagHandler) SearchTags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Search query is required", http.StatusBadRequest)
+		return
+	}
+
+	var tags []models.Tag
+	// Ищем теги, которые содержат запрос в title_ru или title_en
+	// Ограничиваем результат 10 тегами с наибольшим count
+	result := h.db.Where(
+		"LOWER(title_ru) LIKE ? OR LOWER(title_en) LIKE ?",
+		"%"+strings.ToLower(query)+"%",
+		"%"+strings.ToLower(query)+"%",
+	).
+		Order("count DESC").
+		Limit(10).
+		Find(&tags)
+
+	if result.Error != nil {
+		log.Printf("Failed to search tags: %v", result.Error)
+		http.Error(w, "Failed to search tags", http.StatusInternalServerError)
+		return
+	}
+
+	response := SearchTagsResponse{
+		Tags: tags,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // formatModelTagToEnglish преобразует тег из формата модели в английский формат

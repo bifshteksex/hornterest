@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"pornterest/internal/elasticsearch"
 	"pornterest/internal/middleware"
 	"pornterest/internal/models"
 	"pornterest/internal/tasks"
@@ -22,13 +23,20 @@ import (
 // PinHandler обрабатывает запросы, связанные с пинами
 type PinHandler struct {
 	db        *gorm.DB
-	taskQueue *tasks.TaskQueue // используем полное имя с пакетом
+	taskQueue *tasks.TaskQueue
+	es        *elasticsearch.ESClient
 }
 
-func NewPinHandler(db *gorm.DB, taskQueue *tasks.TaskQueue) *PinHandler {
+type SearchPinsResponse struct {
+	PinIDs []int `json:"pin_ids"`
+	Total  int   `json:"total"`
+}
+
+func NewPinHandler(db *gorm.DB, taskQueue *tasks.TaskQueue, es *elasticsearch.ESClient) *PinHandler {
 	return &PinHandler{
 		db:        db,
 		taskQueue: taskQueue,
+		es:        es,
 	}
 }
 
@@ -41,6 +49,7 @@ func (h *PinHandler) GetPins(w http.ResponseWriter, r *http.Request) {
 
 	limitStr := r.URL.Query().Get("limit")
 	pageStr := r.URL.Query().Get("page")
+	pinIDsStr := r.URL.Query().Get("ids") // Новый параметр
 
 	limit := 10 // Значение по умолчанию
 	if limitStr != "" {
@@ -60,19 +69,27 @@ func (h *PinHandler) GetPins(w http.ResponseWriter, r *http.Request) {
 
 	offset := (page - 1) * limit
 
+	query := h.db.Model(&models.Pin{})
+
+	// Если переданы ID пинов, фильтруем по ним
+	if pinIDsStr != "" {
+		var pinIDs []int
+		if err := json.Unmarshal([]byte(pinIDsStr), &pinIDs); err != nil {
+			http.Error(w, "Invalid pin IDs format", http.StatusBadRequest)
+			return
+		}
+		query = query.Where("id IN ?", pinIDs)
+	}
+
 	var pins []models.Pin
-	result := h.db.Limit(limit).Offset(offset).Order("id DESC").Find(&pins)
+	result := query.Limit(limit).Offset(offset).Order("id DESC").Find(&pins)
 	if result.Error != nil {
 		http.Error(w, "Failed to fetch pins", http.StatusInternalServerError)
 		log.Printf("Failed to fetch pins: %v", result.Error)
 		return
 	}
 
-	var totalCount int64
-	h.db.Model(&models.Pin{}).Count(&totalCount)
-
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Total-Count", strconv.Itoa(int(totalCount))) // Отправляем общее количество для frontend'а (опционально)
 	if err := json.NewEncoder(w).Encode(pins); err != nil {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
@@ -310,8 +327,47 @@ func (h *PinHandler) UploadPin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Index the pin in Elasticsearch
+	var tags []models.Tag
+	if err := h.db.Model(&pin).Association("Tags").Find(&tags); err != nil {
+		log.Printf("Failed to fetch tags for Elasticsearch indexing: %v", err)
+	} else {
+		if err := h.es.IndexPin(r.Context(), pin, tags); err != nil {
+			log.Printf("Failed to index pin in Elasticsearch: %v", err)
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Pin uploaded successfully", "path": filePath, "id": fmt.Sprintf("%d", pin.ID)})
+}
+
+func (h *PinHandler) SearchPins(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Search query is required", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем все ID пинов, соответствующих поисковому запросу
+	pinIDs, total, err := h.es.SearchPinIDs(r.Context(), query)
+	if err != nil {
+		log.Printf("Failed to search pins: %v", err)
+		http.Error(w, "Failed to perform search", http.StatusInternalServerError)
+		return
+	}
+
+	response := SearchPinsResponse{
+		PinIDs: pinIDs,
+		Total:  total,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // AddComment обрабатывает добавление нового комментария к пину

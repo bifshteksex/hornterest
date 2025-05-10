@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -8,9 +9,11 @@ import (
 
 	"pornterest/internal/config"
 	"pornterest/internal/database"
+	"pornterest/internal/elasticsearch"
 	"pornterest/internal/handlers"
 	"pornterest/internal/routes"
 	"pornterest/internal/tasks" // добавляем импорт
+	"pornterest/internal/tools"
 
 	"log/slog" // добавляем для логгера
 
@@ -50,8 +53,19 @@ func main() {
 	taskQueue := tasks.NewTaskQueue(dbGORM, logger)
 	taskQueue.StartProcessing()
 
+	// Initialize Elasticsearch client
+	esClient, err := elasticsearch.NewESClient([]string{os.Getenv("ELASTICSEARCH_URL")})
+	if err != nil {
+		log.Fatalf("Failed to create Elasticsearch client: %v", err)
+	}
+
+	// Create index if it doesn't exist
+	if err := esClient.CreateIndex(context.Background(), "pins"); err != nil {
+		log.Fatalf("Failed to create Elasticsearch index: %v", err)
+	}
+
 	// Создание обработчиков
-	pinHandler := handlers.NewPinHandler(dbGORM, taskQueue) // обновили
+	pinHandler := handlers.NewPinHandler(dbGORM, taskQueue, esClient)
 	userHandler := handlers.NewUserHandler(dbGORM, cfg)
 	actionHandler := handlers.NewActionHandler(dbGORM)
 	subscriptionHandler := handlers.NewSubscriptionHandler(dbGORM)
@@ -77,6 +91,10 @@ func main() {
 
 	// Применяем CORS middleware
 	handler := c.Handler(router)
+
+	if err := tools.ReindexAllPins(dbGORM, esClient); err != nil {
+		log.Printf("Failed to reindex pins: %v", err)
+	}
 
 	// Запуск сервера
 	fmt.Printf("Server listening on port %s\n", cfg.Port)
